@@ -105,12 +105,15 @@ module JSONAPI
         result
       end
 
-      def serialize_errors(raw_errors)
-        if is_activemodel_errors?(raw_errors)
+      def serialize_errors(raw_errors, options = {})
+        result = if is_activemodel_errors?(raw_errors)
           { 'errors' => activemodel_errors(raw_errors) }
         else
           { 'errors' => raw_errors }
         end
+        result['jsonapi'] = options[:jsonapi] if options[:jsonapi]
+        result['meta'] = options[:meta] if options[:meta]
+        result
       end
 
       def find_serializer(object, options)
