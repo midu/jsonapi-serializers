@@ -15,7 +15,17 @@ module JSONAPI
     end
 
     class << self
+      def proxy_objects(objects)
+        return nil unless objects
+        if objects.respond_to?(:map)
+          objects.map { |obj| DynamicProxyObject.new(obj) }
+        else
+          DynamicProxyObject.new(objects)
+        end
+      end
+
       def serialize(objects, options = {})
+        objects = proxy_objects(objects)
         options.symbolize_keys!
         options[:fields] ||= {}
 
@@ -107,10 +117,10 @@ module JSONAPI
 
       def serialize_errors(raw_errors, options = {})
         result = if is_activemodel_errors?(raw_errors)
-          { 'errors' => activemodel_errors(raw_errors) }
-        else
-          { 'errors' => raw_errors }
-        end
+                   { 'errors' => activemodel_errors(raw_errors) }
+                 else
+                   { 'errors' => raw_errors }
+                 end
         result['jsonapi'] = options[:jsonapi] if options[:jsonapi]
         result['meta'] = options[:meta] if options[:meta]
         result
@@ -235,11 +245,11 @@ module JSONAPI
           if serializer.has_one_relationships.key?(unformatted_attr_name)
             is_valid_attr = true
             attr_data = serializer.has_one_relationships[unformatted_attr_name]
-            object = serializer.has_one_relationship(unformatted_attr_name, attr_data)
+            object = proxy_objects(serializer.has_one_relationship(unformatted_attr_name, attr_data))
           elsif serializer.has_many_relationships.key?(unformatted_attr_name)
             is_valid_attr = true
             attr_data = serializer.has_many_relationships[unformatted_attr_name]
-            object = serializer.has_many_relationship(unformatted_attr_name, attr_data)
+            object = proxy_objects(serializer.has_many_relationship(unformatted_attr_name, attr_data))
           end
 
           unless is_valid_attr

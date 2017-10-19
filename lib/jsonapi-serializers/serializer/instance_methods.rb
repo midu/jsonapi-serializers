@@ -1,8 +1,6 @@
 module JSONAPI
   module Serializer
     module InstanceMethods
-      @@unformatted_attribute_names = {}
-
       attr_accessor :object
       attr_accessor :context
       attr_accessor :base_url
@@ -44,7 +42,7 @@ module JSONAPI
       # The opposite of format_name. Override this if you override format_name.
       def unformat_name(attribute_name)
         attr_name = attribute_name.to_s
-        @@unformatted_attribute_names[attr_name] ||= attr_name.underscore.freeze
+        attr_name.underscore.freeze
       end
 
       # Override this to provide resource-object jsonapi object containing the version in use.
@@ -95,7 +93,7 @@ module JSONAPI
           end
 
           next unless @_include_linkages.include?(formatted_attribute_name) || attr_data[:options][:include_data]
-          object = has_one_relationship(attribute_name, attr_data)
+          object = JSONAPI::Serializer.proxy_objects(has_one_relationship(attribute_name, attr_data))
           if object.nil?
             # Spec: Resource linkage MUST be represented as one of the following:
             # - null for empty to-one relationships.
@@ -130,7 +128,7 @@ module JSONAPI
           # http://jsonapi.org/format/#document-structure-resource-relationships
           next unless @_include_linkages.include?(formatted_attribute_name) || attr_data[:options][:include_data]
           data[formatted_attribute_name]['data'] = []
-          objects = has_many_relationship(attribute_name, attr_data) || []
+          objects = JSONAPI::Serializer.proxy_objects(has_many_relationship(attribute_name, attr_data) || [])
           objects.each do |obj|
             related_object_serializer = JSONAPI::Serializer.find_serializer(obj, attr_data[:options])
             data[formatted_attribute_name]['data'] << {

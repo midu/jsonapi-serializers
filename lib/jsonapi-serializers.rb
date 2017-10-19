@@ -3,6 +3,7 @@ require 'jsonapi-serializers/attributes'
 require 'jsonapi-serializers/serializer'
 require 'jsonapi-serializers/serializer/class_methods'
 require 'jsonapi-serializers/serializer/instance_methods'
+require 'jsonapi-serializers/dynamic_proxy_object'
 
 module JSONAPI
   module Serializer
