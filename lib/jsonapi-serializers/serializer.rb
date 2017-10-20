@@ -5,6 +5,7 @@ require 'case_transform'
 
 module JSONAPI
   module Serializer
+    @@memoized_serializer_classes = {}
     include ActiveSupport::Configurable
     def self.included(target)
       target.extend(ClassMethods)
@@ -15,26 +16,16 @@ module JSONAPI
     end
 
     class << self
-      def proxy_objects(objects)
-        return nil unless objects
-        if objects.respond_to?(:map)
-          objects.map { |obj| DynamicProxyObject.new(obj) }
-        else
-          DynamicProxyObject.new(objects)
-        end
-      end
-
       def serialize(objects, options = {})
-        objects = proxy_objects(objects)
         options.symbolize_keys!
         options[:fields] ||= {}
 
-        includes = normalize(options[:include])
+        includes = options[:include]
 
         fields = {}
         # Normalize fields to accept a comma-separated string or an array of strings.
         options[:fields].map do |type, whitelisted_fields|
-          fields[type.to_s] = normalize(whitelisted_fields).map(&:to_sym)
+          fields[type.to_s] = whitelisted_fields.map(&:to_sym)
         end
 
         # An internal-only structure that is passed through serializers as they are created.
@@ -137,12 +128,8 @@ module JSONAPI
 
       private
 
-      def normalize(possible_string)
-        return unless possible_string
-        Array((possible_string.is_a?(String) ? possible_string.split(',') : possible_string)).uniq
-      end
-
       def find_serializer_class(object, options)
+        return @@memoized_serializer_classes[object.class.name] if @@memoized_serializer_classes[object.class.name]
         class_name = if options[:serializer]
                        options[:serializer].to_s
                      elsif options[:namespace]
@@ -150,7 +137,13 @@ module JSONAPI
                      else
                        "#{object.class.name}Serializer"
                      end
-        class_name.constantize
+        @@memoized_serializer_classes[object.class.name] ||= class_name.constantize
+      end
+
+      def memoized_serializer_classes
+        @memoized_serializer_classes ||= {}.tap do |hash|
+          hash.default_proc = ->(hash, key) { hash[key] = {} }
+        end
       end
 
       def activemodel_errors(raw_errors)
@@ -222,18 +215,12 @@ module JSONAPI
       #   ['users', '1'] => {object: <User>, include_linkages: []},
       #   ['users', '2'] => {object: <User>, include_linkages: []},
       # }
-      def find_recursive_relationships(root_object, root_inclusion_tree, results, options)
+      def find_recursive_relationships(root_object, root_inclusion_tree, results, options, predefined_serializers = {})
         root_inclusion_tree.each do |attribute_name, child_inclusion_tree|
           # Skip the sentinal value, but we need to preserve it for siblings.
           next if attribute_name == :_include
 
-          specific_serializer_options = results.find do |k, _v|
-            k.first == root_object.id.to_s &&
-              k.last == transform_key_casing(root_object.class.name.split('::').last.underscore).pluralize
-          end
-          specific_serializer_options = specific_serializer_options.last[:options] if specific_serializer_options
-
-          specified_serializer = specific_serializer_options[:serializer] if specific_serializer_options
+          specified_serializer = predefined_serializers[root_object.class.name]
           options_to_be_passed = specified_serializer ? options.merge(serializer: specified_serializer) : options
           serializer = JSONAPI::Serializer.find_serializer(root_object, options_to_be_passed)
           unformatted_attr_name = serializer.unformat_name(attribute_name).to_sym
@@ -245,11 +232,11 @@ module JSONAPI
           if serializer.has_one_relationships.key?(unformatted_attr_name)
             is_valid_attr = true
             attr_data = serializer.has_one_relationships[unformatted_attr_name]
-            object = proxy_objects(serializer.has_one_relationship(unformatted_attr_name, attr_data))
+            object = Array(serializer.has_one_relationship(unformatted_attr_name, attr_data))
           elsif serializer.has_many_relationships.key?(unformatted_attr_name)
             is_valid_attr = true
             attr_data = serializer.has_many_relationships[unformatted_attr_name]
-            object = proxy_objects(serializer.has_many_relationship(unformatted_attr_name, attr_data))
+            object = serializer.has_many_relationship(unformatted_attr_name, attr_data)
           end
 
           unless is_valid_attr
@@ -268,7 +255,7 @@ module JSONAPI
 
           # Full linkage: a request for comments.author MUST automatically include comments
           # in the response.
-          objects = Array(object)
+          objects = object
           if child_inclusion_tree[:_include] == true
             # Include the current level objects if the _include attribute exists.
             # If it is not set, that indicates that this is an inner path and not a leaf and will
@@ -295,6 +282,7 @@ module JSONAPI
                   current_child_includes << inclusion_name
                 end
               end
+              predefined_serializers[root_object.class.name] = attr_data[:options][:serializer]
 
               # Special merge: we might see this object multiple times in the course of recursion,
               # so merge the include_linkages each time we see it to load all the relevant linkages.
@@ -308,7 +296,7 @@ module JSONAPI
           next if child_inclusion_tree.empty?
           # For each object we just loaded, find all deeper recursive relationships.
           objects.each do |obj|
-            find_recursive_relationships(obj, child_inclusion_tree, results, options)
+            find_recursive_relationships(obj, child_inclusion_tree, results, options, predefined_serializers)
           end
         end
         nil

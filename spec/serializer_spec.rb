@@ -674,8 +674,7 @@ describe JSONAPI::Serializer do
           serialize_primary(post.author, serializer: MyAppOtherNamespace::UserSerializer)
         ]
       }
-      # Also test that it handles string include arguments.
-      includes = 'long-comments, long-comments.post.author'
+      includes = %w(long-comments long-comments.post.author)
       actual_data = JSONAPI::Serializer.serialize(post, include: includes)
 
       # Multiple expectations for better diff output for debugging.
@@ -711,7 +710,7 @@ describe JSONAPI::Serializer do
         long_comments = [first_comment, second_comment]
         post = create(:post, :with_author, long_comments: long_comments)
 
-        serialized_data = JSONAPI::Serializer.serialize(post, fields: { posts: :title })
+        serialized_data = JSONAPI::Serializer.serialize(post, fields: { posts: [:title] })
         expect(serialized_data).to eq(
           'data' => {
             'type' => 'posts',
@@ -733,7 +732,7 @@ describe JSONAPI::Serializer do
         long_comments = [first_comment, second_comment]
         post = create(:post, :with_author, long_comments: long_comments)
 
-        fields = { posts: 'title,author,long-comments' }
+        fields = { posts: %w(title author long-comments) }
         serialized_data = JSONAPI::Serializer.serialize(post, fields: fields)
         expect(serialized_data['data']['relationships']).to eq(
           'author' => {
@@ -772,8 +771,8 @@ describe JSONAPI::Serializer do
                                                         include_linkages: ['author'],
                                                         fields: { 'posts' => [:title, :author] })
 
-        fields = { posts: 'title,author', users: '' }
-        serialized_data = JSONAPI::Serializer.serialize(post, fields: fields, include: 'author')
+        fields = { posts: %w(title author), users: [] }
+        serialized_data = JSONAPI::Serializer.serialize(post, fields: fields, include: ['author'])
         expect(serialized_data).to eq(
           'data' => expected_primary_data,
           'included' => [
@@ -785,8 +784,8 @@ describe JSONAPI::Serializer do
           ]
         )
 
-        fields = { posts: 'title,author' }
-        serialized_data = JSONAPI::Serializer.serialize(post, fields: fields, include: 'author')
+        fields = { posts: %w(title author) }
+        serialized_data = JSONAPI::Serializer.serialize(post, fields: fields, include: ['author'])
         expect(serialized_data).to eq(
           'data' => expected_primary_data,
           'included' => [
@@ -955,19 +954,19 @@ describe JSONAPI::Serializer do
   describe 'include validation' do
     it 'raises an exception when join character is invalid' do
       expect do
-        JSONAPI::Serializer.serialize(create(:post), include: 'long_comments')
+        JSONAPI::Serializer.serialize(create(:post), include: ['long_comments'])
       end.to raise_error(JSONAPI::Serializer::InvalidIncludeError)
 
       expect do
-        JSONAPI::Serializer.serialize(create(:post), include: 'long-comments')
+        JSONAPI::Serializer.serialize(create(:post), include: ['long-comments'])
       end.not_to raise_error
 
       expect do
-        JSONAPI::Serializer.serialize(create(:underscore_test), include: 'tagged-posts')
+        JSONAPI::Serializer.serialize(create(:underscore_test), include: ['tagged-posts'])
       end.to raise_error(JSONAPI::Serializer::InvalidIncludeError)
 
       expect do
-        JSONAPI::Serializer.serialize(create(:underscore_test), include: 'tagged_posts')
+        JSONAPI::Serializer.serialize(create(:underscore_test), include: ['tagged_posts'])
       end.not_to raise_error
     end
   end
