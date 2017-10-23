@@ -85,69 +85,75 @@ module JSONAPI
         # Merge in data for has_one relationships.
         has_one_relationships.each do |attribute_name, attr_data|
           formatted_attribute_name = format_name(attribute_name)
+          result = {}
 
-          data[formatted_attribute_name] = {}
-
-          if attr_data[:options][:include_links]
+          options = attr_data[:options]
+          if options[:include_links]
             links_self = relationship_self_link(attribute_name)
             links_related = relationship_related_link(attribute_name)
-            data[formatted_attribute_name]['links'] = {} if links_self || links_related
-            data[formatted_attribute_name]['links']['self'] = links_self if links_self
-            data[formatted_attribute_name]['links']['related'] = links_related if links_related
+
+            result['links'] = {
+              'self' => (links_self if links_self),
+              'related' => (links_related if links_related)
+            }
           end
 
-          next unless @_include_linkages.include?(formatted_attribute_name) || attr_data[:options][:include_data]
+          next unless @_include_linkages.include?(formatted_attribute_name) || options[:include_data]
           object = has_one_relationship(attribute_name, attr_data)
           if object.nil?
             # Spec: Resource linkage MUST be represented as one of the following:
             # - null for empty to-one relationships.
             # http://jsonapi.org/format/#document-structure-resource-relationships
-            data[formatted_attribute_name]['data'] = nil
+            result['data'] = nil
           else
-            related_object_serializer = JSONAPI::Serializer.find_serializer(object, attr_data[:options])
-            data[formatted_attribute_name]['data'] = {
-              'id' => related_object_serializer.id.to_s,
-              'type' => related_object_serializer.type.to_s
+            related_object_serializer = JSONAPI::Serializer.find_serializer(object, options)
+            result['data'] = {
+              'id' => related_object_serializer.id,
+              'type' => related_object_serializer.type
             }
           end
+          data[formatted_attribute_name] = result
         end
 
         # Merge in data for has_many relationships.
         has_many_relationships.each do |attribute_name, attr_data|
           formatted_attribute_name = format_name(attribute_name)
+          result = {}
 
-          data[formatted_attribute_name] = {}
-
-          if attr_data[:options][:include_links]
+          options = attr_data[:options]
+          if options[:include_links]
             links_self = relationship_self_link(attribute_name)
             links_related = relationship_related_link(attribute_name)
-            data[formatted_attribute_name]['links'] = {} if links_self || links_related
-            data[formatted_attribute_name]['links']['self'] = links_self if links_self
-            data[formatted_attribute_name]['links']['related'] = links_related if links_related
+            result['links'] = {
+              'self' => (links_self if links_self),
+              'related' => (links_related if links_related)
+            }
           end
 
           # Spec: Resource linkage MUST be represented as one of the following:
           # - an empty array ([]) for empty to-many relationships.
           # - an array of linkage objects for non-empty to-many relationships.
           # http://jsonapi.org/format/#document-structure-resource-relationships
-          next unless @_include_linkages.include?(formatted_attribute_name) || attr_data[:options][:include_data]
-          data[formatted_attribute_name]['data'] = []
+          next unless @_include_linkages.include?(formatted_attribute_name) || options[:include_data]
+          result['data'] = []
           objects = has_many_relationship(attribute_name, attr_data) || []
           objects.each do |obj|
-            related_object_serializer = JSONAPI::Serializer.find_serializer(obj, attr_data[:options])
-            data[formatted_attribute_name]['data'] << {
-              'id' => related_object_serializer.id.to_s,
-              'type' => related_object_serializer.type.to_s
+            related_object_serializer = JSONAPI::Serializer.find_serializer(obj, options)
+            result['data'] << {
+              'id' => related_object_serializer.id,
+              'type' => related_object_serializer.type
             }
           end
+          data[formatted_attribute_name] = result
         end
         data
       end
 
       def attributes
-        return {} if self.class.attributes_map.nil?
+        attributes_map = self.class.attributes_map
+        return {} if attributes_map.nil?
         attributes = {}
-        self.class.attributes_map.each do |attribute_name, attr_data|
+        attributes_map.each do |attribute_name, attr_data|
           next unless should_include_attr?(attribute_name, attr_data)
           value = evaluate_attr_or_block(attribute_name, attr_data[:attr_or_block])
           attributes[format_name(attribute_name)] = value
@@ -156,9 +162,10 @@ module JSONAPI
       end
 
       def has_one_relationships
-        return {} if self.class.to_one_associations.nil?
+        to_one_associations = self.class.to_one_associations
+        return {} if to_one_associations.nil?
         data = {}
-        self.class.to_one_associations.each do |attribute_name, attr_data|
+        to_one_associations.each do |attribute_name, attr_data|
           next unless should_include_attr?(attribute_name, attr_data)
           data[attribute_name] = attr_data
         end
@@ -170,9 +177,10 @@ module JSONAPI
       end
 
       def has_many_relationships
-        return {} if self.class.to_many_associations.nil?
+        to_many_associations = self.class.to_many_associations
+        return {} if to_many_associations.nil?
         data = {}
-        self.class.to_many_associations.each do |attribute_name, attr_data|
+        to_many_associations.each do |attribute_name, attr_data|
           next unless should_include_attr?(attribute_name, attr_data)
           data[attribute_name] = attr_data
         end
@@ -187,13 +195,15 @@ module JSONAPI
 
       def should_include_attr?(attribute_name, attr_data)
         # Allow "if: :show_title?" and "unless: :hide_title?" attribute options.
-        if_method_name = attr_data[:options][:if]
-        unless_method_name = attr_data[:options][:unless]
+        options = attr_data[:options]
+        if_method_name = options[:if]
+        unless_method_name = options[:unless]
         formatted_attribute_name = format_name(attribute_name).to_sym
         show_attr = true
         show_attr &&= send(if_method_name) if if_method_name
         show_attr &&= !send(unless_method_name) if unless_method_name
-        show_attr &&= @_fields[type.to_s].include?(formatted_attribute_name) if @_fields[type.to_s]
+        fields = @_fields[type]
+        show_attr &&= fields.include?(formatted_attribute_name) if fields
         show_attr
       end
 
