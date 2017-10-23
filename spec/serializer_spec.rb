@@ -8,6 +8,10 @@ describe JSONAPI::Serializer do
     JSONAPI::Serializer.send(:serialize_primary, object, options)
   end
 
+  after(:each) do
+    JSONAPI::Serializer.class_variable_set(:@@memoized_serializer_classes, {})
+  end
+
   describe 'internal-only serialize_primary' do
     it 'serializes nil to nil' do
       # Spec: Primary data MUST be either:
