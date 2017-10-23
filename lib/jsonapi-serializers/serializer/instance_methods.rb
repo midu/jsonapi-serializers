@@ -154,7 +154,7 @@ module JSONAPI
         return {} if attributes_map.nil?
         attributes = {}
         attributes_map.each do |attribute_name, attr_data|
-          next unless should_include_attr?(attribute_name, attr_data)
+          next unless should_include_attr?(attribute_name)
           value = evaluate_attr_or_block(attribute_name, attr_data[:attr_or_block])
           attributes[format_name(attribute_name)] = value
         end
@@ -166,7 +166,7 @@ module JSONAPI
         return {} if to_one_associations.nil?
         data = {}
         to_one_associations.each do |attribute_name, attr_data|
-          next unless should_include_attr?(attribute_name, attr_data)
+          next unless should_include_attr?(attribute_name)
           data[attribute_name] = attr_data
         end
         data
@@ -181,7 +181,7 @@ module JSONAPI
         return {} if to_many_associations.nil?
         data = {}
         to_many_associations.each do |attribute_name, attr_data|
-          next unless should_include_attr?(attribute_name, attr_data)
+          next unless should_include_attr?(attribute_name)
           data[attribute_name] = attr_data
         end
         data
@@ -193,11 +193,10 @@ module JSONAPI
 
       protected
 
-      def should_include_attr?(attribute_name, attr_data)
-        formatted_attribute_name = format_name(attribute_name).to_sym
+      def should_include_attr?(attribute_name)
         show_attr = true
         fields = @_fields[type]
-        show_attr &&= fields.include?(formatted_attribute_name) if fields
+        show_attr &&= fields.include?(format_name(attribute_name).to_sym) if fields
         show_attr
       end
 

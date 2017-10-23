@@ -19,9 +19,9 @@ module JSONAPI
     end
 
     module ClassMethods
-      attr_accessor :attributes_map
-      attr_accessor :to_one_associations
-      attr_accessor :to_many_associations
+      attr_reader :attributes_map
+      attr_reader :to_one_associations
+      attr_reader :to_many_associations
 
       def attribute(name, options = {}, &block)
         add_attribute(name, options, &block)

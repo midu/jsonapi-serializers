@@ -18,15 +18,14 @@ module JSONAPI
     class << self
       def serialize(objects, options = {})
         options.symbolize_keys!
-        options[:fields] ||= {}
-
-        includes = options[:include]
 
         fields = {}
-        # Normalize fields to accept a comma-separated string or an array of strings.
-        options[:fields].map do |type, whitelisted_fields|
+        options[:fields] ||= {}
+        options[:fields].each do |type, whitelisted_fields|
           fields[type.to_s] = whitelisted_fields.map(&:to_sym)
         end
+
+        includes = options[:include]
 
         # An internal-only structure that is passed through serializers as they are created.
         passthrough_options = {
@@ -45,19 +44,16 @@ module JSONAPI
           if objects.respond_to?(:each)
             unless options[:is_collection]
               raise JSONAPI::Serializer::AmbiguousCollectionError,
-                'Must provide `is_collection: true` to `serialize` when serializing collections.'
+                    'Must provide `is_collection: true` to `serialize` when serializing collections.'
             end
           elsif options[:is_collection]
             raise JSONAPI::Serializer::AmbiguousCollectionError,
-              'Attempted to serialize a single object as a collection.'
+                  'Attempted to serialize a single object as a collection.'
           end
         end
 
         # Automatically include linkage data for any relation that is also included.
-        if includes
-          direct_children_includes = includes.reject { |key| key.include?('.') }
-          passthrough_options[:include_linkages] = direct_children_includes
-        end
+        passthrough_options[:include_linkages] = includes.reject { |key| key.include?('.') } if includes
 
         # Spec: Primary data MUST be either:
         # - a single resource object or null, for requests that target single resources.
@@ -92,14 +88,15 @@ module JSONAPI
           end
 
           result['included'] = relationship_data.map do |_, data|
-            included_passthrough_options = {}
-            included_passthrough_options[:base_url] = passthrough_options[:base_url]
-            included_passthrough_options[:context] = passthrough_options[:context]
-            included_passthrough_options[:fields] = passthrough_options[:fields]
+            included_passthrough_options = {
+              base_url: passthrough_options[:base_url],
+              context: passthrough_options[:context],
+              fields: passthrough_options[:fields],
 
-            included_passthrough_options[:serializer] = find_serializer_class(data[:object], data[:options])
-            included_passthrough_options[:namespace] = passthrough_options[:namespace]
-            included_passthrough_options[:include_linkages] = data[:include_linkages]
+              serializer: data[:options][:serializer],
+              namespace: passthrough_options[:namespace],
+              include_linkages: data[:include_linkages]
+            }
             serialize_primary(data[:object], included_passthrough_options)
           end
         end
@@ -131,14 +128,13 @@ module JSONAPI
       def find_serializer_class(object, options)
         object_class_name = object.class.name
         return @@memoized_serializer_classes[object_class_name] if @@memoized_serializer_classes[object_class_name]
-        class_name = if options[:serializer]
-                       options[:serializer].to_s
-                     elsif options[:namespace]
+        class_name = if options[:namespace]
                        "#{options[:namespace]}::#{object_class_name}Serializer"
                      else
                        "#{object_class_name}Serializer"
                      end
-        @@memoized_serializer_classes[object_class_name] ||= class_name.constantize
+        klass = options[:serializer] || class_name.constantize
+        @@memoized_serializer_classes[object_class_name] ||= klass
       end
 
       def activemodel_errors(raw_errors)
