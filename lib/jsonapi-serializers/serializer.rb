@@ -226,7 +226,7 @@ module JSONAPI
           if serializer.has_one_relationships.key?(unformatted_attr_name)
             is_valid_attr = true
             attr_data = serializer.has_one_relationships[unformatted_attr_name]
-            object = Array(serializer.has_one_relationship(unformatted_attr_name, attr_data))
+            object = serializer.has_one_relationship(unformatted_attr_name, attr_data)
           elsif serializer.has_many_relationships.key?(unformatted_attr_name)
             is_valid_attr = true
             attr_data = serializer.has_many_relationships[unformatted_attr_name]
@@ -249,7 +249,7 @@ module JSONAPI
 
           # Full linkage: a request for comments.author MUST automatically include comments
           # in the response.
-          objects = object
+          objects = Array(object)
           if child_inclusion_tree[:_include] == true
             # Include the current level objects if the _include attribute exists.
             # If it is not set, that indicates that this is an inner path and not a leaf and will
