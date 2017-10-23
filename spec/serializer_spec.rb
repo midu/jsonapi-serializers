@@ -1014,8 +1014,8 @@ describe JSONAPI::Serializer do
       post.long_comments = long_comments
 
       expected_data = {
-        'data' => serialize_primary(post,             serializer: MyApp::FancyPostSerializer,
-                                                      include_linkages: ['author', 'long-comments']),
+        'data' => serialize_primary(post, serializer: MyApp::FancyPostSerializer,
+                                          include_linkages: ['author', 'long-comments']),
         'included' => [
           serialize_primary(post.author, serializer: MyApp::FancyAuthorSerializer),
           serialize_primary(post.long_comments.first, serializer: MyApp::FancyLongCommentSerializer),

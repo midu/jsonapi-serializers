@@ -183,6 +183,8 @@ module JSONAPI
         evaluate_attr_or_block(attribute_name, attr_data[:attr_or_block])
       end
 
+      protected
+
       def should_include_attr?(attribute_name, attr_data)
         # Allow "if: :show_title?" and "unless: :hide_title?" attribute options.
         if_method_name = attr_data[:options][:if]
@@ -194,7 +196,6 @@ module JSONAPI
         show_attr &&= @_fields[type.to_s].include?(formatted_attribute_name) if @_fields[type.to_s]
         show_attr
       end
-      protected :should_include_attr?
 
       def evaluate_attr_or_block(_attribute_name, attr_or_block)
         if attr_or_block.is_a?(Proc)
@@ -205,7 +206,6 @@ module JSONAPI
           object.send(attr_or_block)
         end
       end
-      protected :evaluate_attr_or_block
     end
   end
 end
