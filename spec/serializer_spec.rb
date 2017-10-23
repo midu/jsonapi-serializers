@@ -843,49 +843,6 @@ describe JSONAPI::Serializer do
       expect(result).to eq('foo' => { _include: true, 'bar' => { _include: true, 'baz' => { _include: true } } })
     end
   end
-  describe 'if/unless handling with contexts' do
-    it 'can be used to show/hide attributes' do
-      post = create(:post)
-      options = { serializer: MyApp::PostSerializerWithContext }
-
-      options[:context] = { show_body: false }
-      data = JSONAPI::Serializer.serialize(post, options)
-      expect(data['data']['attributes']).to_not have_key('body')
-
-      options[:context] = { show_body: true }
-      data = JSONAPI::Serializer.serialize(post, options)
-      expect(data['data']['attributes']).to have_key('body')
-      expect(data['data']['attributes']['body']).to eq('Body for Post 1')
-
-      options[:context] = { hide_body: true }
-      data = JSONAPI::Serializer.serialize(post, options)
-      expect(data['data']['attributes']).to_not have_key('body')
-
-      options[:context] = { hide_body: false }
-      data = JSONAPI::Serializer.serialize(post, options)
-      expect(data['data']['attributes']).to have_key('body')
-      expect(data['data']['attributes']['body']).to eq('Body for Post 1')
-
-      options[:context] = { show_body: false, hide_body: false }
-      data = JSONAPI::Serializer.serialize(post, options)
-      expect(data['data']['attributes']).to_not have_key('body')
-
-      options[:context] = { show_body: true, hide_body: false }
-      data = JSONAPI::Serializer.serialize(post, options)
-      expect(data['data']['attributes']).to have_key('body')
-      expect(data['data']['attributes']['body']).to eq('Body for Post 1')
-
-      # Remember: attribute is configured as if: show_body?, unless: hide_body?
-      # and the results should be logically AND'd together:
-      options[:context] = { show_body: false, hide_body: true }
-      data = JSONAPI::Serializer.serialize(post, options)
-      expect(data['data']['attributes']).to_not have_key('body')
-
-      options[:context] = { show_body: true, hide_body: true }
-      data = JSONAPI::Serializer.serialize(post, options)
-      expect(data['data']['attributes']).to_not have_key('body')
-    end
-  end
   describe 'context' do
     it 'is passed through all relationship serializers' do
       user = create(:user, name: 'Long Comment Author -- Should Not Be Serialized')

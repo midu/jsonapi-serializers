@@ -261,6 +261,8 @@ module JSONAPI
             # be followed by the recursion below.
             objects.each do |obj|
               obj_serializer = JSONAPI::Serializer.find_serializer(obj, options)
+              predefined_serializers[root_object_class_name] = options[:serializer]
+
               # Use keys of ['posts', '1'] for the results to enforce uniqueness.
               # Spec: A compound document MUST NOT include more than one resource object for each
               # type and id pair.
@@ -274,14 +276,10 @@ module JSONAPI
               # Spec: Resource linkage in a compound document allows a client to link together
               # all of the included resource objects without having to GET any relationship URLs.
               # http://jsonapi.org/format/#document-structure-resource-relationships
-              current_child_includes = []
               inclusion_names = child_inclusion_tree.keys.reject { |k| k == :_include }
-              inclusion_names.each do |inclusion_name|
-                if child_inclusion_tree[inclusion_name][:_include]
-                  current_child_includes << inclusion_name
-                end
+              current_child_includes = inclusion_names.map do |inclusion_name|
+                inclusion_name if child_inclusion_tree[inclusion_name][:_include]
               end
-              predefined_serializers[root_object_class_name] = options[:serializer]
 
               results[key] = { object: obj, include_linkages: current_child_includes, options: options }
             end
