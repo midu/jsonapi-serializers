@@ -140,12 +140,6 @@ module JSONAPI
         @@memoized_serializer_classes[object.class.name] ||= class_name.constantize
       end
 
-      def memoized_serializer_classes
-        @memoized_serializer_classes ||= {}.tap do |hash|
-          hash.default_proc = ->(hash, key) { hash[key] = {} }
-        end
-      end
-
       def activemodel_errors(raw_errors)
         raw_errors.to_hash(full_messages: true).inject([]) do |result, (attribute, messages)|
           result + messages.map { |message| single_error(attribute.to_s, message) }
