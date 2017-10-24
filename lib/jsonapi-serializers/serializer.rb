@@ -18,15 +18,14 @@ module JSONAPI
     class << self
       def serialize(objects, options = {})
         options.symbolize_keys!
-        options[:fields] ||= {}
-
-        includes = options[:include]
 
         fields = {}
-        # Normalize fields to accept a comma-separated string or an array of strings.
-        options[:fields].map do |type, whitelisted_fields|
+        options[:fields] ||= {}
+        options[:fields].each do |type, whitelisted_fields|
           fields[type.to_s] = whitelisted_fields.map(&:to_sym)
         end
+
+        includes = options[:include]
 
         # An internal-only structure that is passed through serializers as they are created.
         passthrough_options = {
@@ -42,22 +41,19 @@ module JSONAPI
         # We always must be told if serializing a collection because the JSON:API spec distinguishes
         # how to serialize null single resources vs. empty collections.
         unless options[:skip_collection_check]
-          if options[:is_collection] && !objects.respond_to?(:each)
+          if objects.respond_to?(:each)
+            unless options[:is_collection]
+              raise JSONAPI::Serializer::AmbiguousCollectionError,
+                    'Must provide `is_collection: true` to `serialize` when serializing collections.'
+            end
+          elsif options[:is_collection]
             raise JSONAPI::Serializer::AmbiguousCollectionError,
                   'Attempted to serialize a single object as a collection.'
-          end
-
-          if !options[:is_collection] && objects.respond_to?(:each)
-            raise JSONAPI::Serializer::AmbiguousCollectionError,
-                  'Must provide `is_collection: true` to `serialize` when serializing collections.'
           end
         end
 
         # Automatically include linkage data for any relation that is also included.
-        if includes
-          direct_children_includes = includes.reject { |key| key.include?('.') }
-          passthrough_options[:include_linkages] = direct_children_includes
-        end
+        passthrough_options[:include_linkages] = includes.reject { |key| key.include?('.') } if includes
 
         # Spec: Primary data MUST be either:
         # - a single resource object or null, for requests that target single resources.
@@ -92,14 +88,15 @@ module JSONAPI
           end
 
           result['included'] = relationship_data.map do |_, data|
-            included_passthrough_options = {}
-            included_passthrough_options[:base_url] = passthrough_options[:base_url]
-            included_passthrough_options[:context] = passthrough_options[:context]
-            included_passthrough_options[:fields] = passthrough_options[:fields]
+            included_passthrough_options = {
+              base_url: passthrough_options[:base_url],
+              context: passthrough_options[:context],
+              fields: passthrough_options[:fields],
 
-            included_passthrough_options[:serializer] = find_serializer_class(data[:object], data[:options])
-            included_passthrough_options[:namespace] = passthrough_options[:namespace]
-            included_passthrough_options[:include_linkages] = data[:include_linkages]
+              serializer: data[:options][:serializer],
+              namespace: passthrough_options[:namespace],
+              include_linkages: data[:include_linkages]
+            }
             serialize_primary(data[:object], included_passthrough_options)
           end
         end
@@ -129,15 +126,15 @@ module JSONAPI
       private
 
       def find_serializer_class(object, options)
-        return @@memoized_serializer_classes[object.class.name] if @@memoized_serializer_classes[object.class.name]
-        class_name = if options[:serializer]
-                       options[:serializer].to_s
-                     elsif options[:namespace]
-                       "#{options[:namespace]}::#{object.class.name}Serializer"
+        object_class_name = object.class.name
+        return @@memoized_serializer_classes[object_class_name] if @@memoized_serializer_classes[object_class_name]
+        class_name = if options[:namespace]
+                       "#{options[:namespace]}::#{object_class_name}Serializer"
                      else
-                       "#{object.class.name}Serializer"
+                       "#{object_class_name}Serializer"
                      end
-        @@memoized_serializer_classes[object.class.name] ||= class_name.constantize
+        klass = options[:serializer] || class_name.constantize
+        @@memoized_serializer_classes[object_class_name] ||= klass
       end
 
       def activemodel_errors(raw_errors)
@@ -174,7 +171,8 @@ module JSONAPI
         #  and represents a new resource to be created on the server."
         # http://jsonapi.org/format/#document-resource-objects
         # We'll assume that if the id is blank, it means the resource is to be created.
-        data['id'] = serializer.id.to_s if serializer.id && !serializer.id.empty?
+        serializer_id = serializer.id
+        data['id'] = serializer_id if serializer_id && !serializer_id.empty?
         data['type'] = serializer.type.to_s
 
         # Merge in optional top-level members if they are non-nil.
@@ -214,7 +212,8 @@ module JSONAPI
           # Skip the sentinal value, but we need to preserve it for siblings.
           next if attribute_name == :_include
 
-          specified_serializer = predefined_serializers[root_object.class.name]
+          root_object_class_name = root_object.class.name
+          specified_serializer = predefined_serializers[root_object_class_name]
           options_to_be_passed = specified_serializer ? options.merge(serializer: specified_serializer) : options
           serializer = JSONAPI::Serializer.find_serializer(root_object, options_to_be_passed)
           unformatted_attr_name = serializer.unformat_name(attribute_name).to_sym
@@ -223,13 +222,15 @@ module JSONAPI
           # Check if it is a has_one or has_many relationship.
           object = nil
           is_valid_attr = false
-          if serializer.has_one_relationships.key?(unformatted_attr_name)
+          one_relationships = serializer.has_one_relationships
+          many_relationships = serializer.has_many_relationships
+          if one_relationships.key?(unformatted_attr_name)
             is_valid_attr = true
-            attr_data = serializer.has_one_relationships[unformatted_attr_name]
+            attr_data = one_relationships[unformatted_attr_name]
             object = serializer.has_one_relationship(unformatted_attr_name, attr_data)
-          elsif serializer.has_many_relationships.key?(unformatted_attr_name)
+          elsif many_relationships.key?(unformatted_attr_name)
             is_valid_attr = true
-            attr_data = serializer.has_many_relationships[unformatted_attr_name]
+            attr_data = many_relationships[unformatted_attr_name]
             object = serializer.has_many_relationship(unformatted_attr_name, attr_data)
           end
 
@@ -237,9 +238,8 @@ module JSONAPI
             raise JSONAPI::Serializer::InvalidIncludeError, "'#{attribute_name}' is not a valid include."
           end
 
-          if attribute_name != serializer.format_name(attribute_name)
-            expected_name = serializer.format_name(attribute_name)
-
+          expected_name = serializer.format_name(attribute_name)
+          if attribute_name != expected_name
             raise JSONAPI::Serializer::InvalidIncludeError,
                   "'#{attribute_name}' is not a valid include.  Did you mean '#{expected_name}' ?"
           end
@@ -250,12 +250,15 @@ module JSONAPI
           # Full linkage: a request for comments.author MUST automatically include comments
           # in the response.
           objects = Array(object)
+          options = attr_data[:options]
           if child_inclusion_tree[:_include] == true
             # Include the current level objects if the _include attribute exists.
             # If it is not set, that indicates that this is an inner path and not a leaf and will
             # be followed by the recursion below.
             objects.each do |obj|
-              obj_serializer = JSONAPI::Serializer.find_serializer(obj, attr_data[:options])
+              obj_serializer = JSONAPI::Serializer.find_serializer(obj, options)
+              predefined_serializers[root_object_class_name] = options[:serializer]
+
               # Use keys of ['posts', '1'] for the results to enforce uniqueness.
               # Spec: A compound document MUST NOT include more than one resource object for each
               # type and id pair.
@@ -269,20 +272,12 @@ module JSONAPI
               # Spec: Resource linkage in a compound document allows a client to link together
               # all of the included resource objects without having to GET any relationship URLs.
               # http://jsonapi.org/format/#document-structure-resource-relationships
-              current_child_includes = []
               inclusion_names = child_inclusion_tree.keys.reject { |k| k == :_include }
-              inclusion_names.each do |inclusion_name|
-                if child_inclusion_tree[inclusion_name][:_include]
-                  current_child_includes << inclusion_name
-                end
+              current_child_includes = inclusion_names.map do |inclusion_name|
+                inclusion_name if child_inclusion_tree[inclusion_name][:_include]
               end
-              predefined_serializers[root_object.class.name] = attr_data[:options][:serializer]
 
-              # Special merge: we might see this object multiple times in the course of recursion,
-              # so merge the include_linkages each time we see it to load all the relevant linkages.
-              current_child_includes += results[key] && results[key][:include_linkages] || []
-              current_child_includes.uniq!
-              results[key] = { object: obj, include_linkages: current_child_includes, options: attr_data[:options] }
+              results[key] = { object: obj, include_linkages: current_child_includes, options: options }
             end
           end
 

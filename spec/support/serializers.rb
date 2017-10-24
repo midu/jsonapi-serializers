@@ -225,15 +225,6 @@ module MyApp
     end
   end
 
-  class FancyPostSerializer
-    include JSONAPI::Serializer
-
-    attribute :id
-
-    has_one :author, serializer: MyApp::FancyAuthorSerializer
-    has_many :long_comments, serializer: 'MyApp::FancyLongCommentSerializer'
-  end
-
   class FancyLongCommentSerializer
     include JSONAPI::Serializer
 
@@ -244,6 +235,15 @@ module MyApp
     end
 
     has_one :user, serializer: MyApp::FancyAuthorSerializer
+  end
+
+  class FancyPostSerializer
+    include JSONAPI::Serializer
+
+    attribute :id
+
+    has_one :author, serializer: MyApp::FancyAuthorSerializer
+    has_many :long_comments, serializer: MyApp::FancyLongCommentSerializer
   end
 
   class UserSerializer
