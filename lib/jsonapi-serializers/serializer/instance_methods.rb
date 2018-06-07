@@ -139,10 +139,12 @@ module JSONAPI
           objects = has_many_relationship(attribute_name, attr_data) || []
           objects.each do |obj|
             related_object_serializer = JSONAPI::Serializer.find_serializer(obj, options)
-            result['data'] << {
+            related_object_data = {
               'id' => related_object_serializer.id,
               'type' => related_object_serializer.type
             }
+            related_object_data['meta'] = related_object_serializer.meta if related_object_serializer.meta
+            result['data'] << related_object_data
           end
           data[formatted_attribute_name] = result
         end

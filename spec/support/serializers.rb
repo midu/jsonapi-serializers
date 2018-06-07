@@ -144,6 +144,20 @@ module MyApp
     end
   end
 
+  class LongCommentsSerializerWithMeta
+    include JSONAPI::Serializer
+
+    def meta
+      {'body_length' => object.body.length}
+    end
+  end
+
+  class PostSerializerWithMetaForLongComments
+    include JSONAPI::Serializer
+
+    has_many :long_comments, serializer: LongCommentsSerializerWithMeta
+  end
+
   class PostSerializerWithContext < PostSerializer
     attribute :body, if: :show_body?, unless: :hide_body?
 

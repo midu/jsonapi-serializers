@@ -261,6 +261,43 @@ describe JSONAPI::Serializer do
                                      }
                                    })
       end
+
+      it 'adds meta to one-to-many relationship if meta is set in serializer' do
+        long_comments = create_list(:long_comment, 2)
+        post = create(:post, long_comments: long_comments)
+        options = {
+          serializer: MyApp::PostSerializerWithMetaForLongComments,
+          include_linkages: ['author', 'long-comments']
+        }
+        primary_data = serialize_primary(post, options)
+        expect(primary_data).to eq(
+          'id' => '1',
+          'type' => 'posts',
+          'links' => {
+            'self' => '/posts/1'
+          },
+          'relationships' => {
+            'long-comments' => {
+              'data' => [
+                {
+                  'type' => 'long-comments',
+                  'id' => '1',
+                  'meta' => {
+                    'body_length' => 22
+                  }
+                },
+                {
+                  'type' => 'long-comments',
+                  'id' => '2',
+                  'meta' => {
+                    'body_length' => 22
+                  }
+                }
+              ]
+            }
+          }
+        )
+      end
     end
     it 'can serialize primary data for an empty serializer with no attributes' do
       post = create(:post)
